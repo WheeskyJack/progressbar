@@ -771,73 +771,17 @@ func getStringWidth(c config, str string, colorize bool) int {
 func renderProgressBar(c config, s *state) (int, error) {
 	var sb strings.Builder
 
-	averageRate := average(s.counterLastTenRates)
-	if len(s.counterLastTenRates) == 0 || s.finished {
-		// if no average samples, or if finished,
-		// then average rate should be the total rate
-		if t := time.Since(s.startTime).Seconds(); t > 0 {
-			averageRate = s.currentBytes / t
-		} else {
-			averageRate = 0
-		}
-	}
+	averageRate := calculateAvgRate(s)
 
 	// show iteration count in "current/total" iterations format
-	if c.showIterationsCount {
-		if sb.Len() == 0 {
-			sb.WriteString("(")
-		} else {
-			sb.WriteString(", ")
-		}
-		if !c.ignoreLength {
-			if c.showBytes {
-				currentHumanize, currentSuffix := humanizeBytes(s.currentBytes, c.useIECUnits)
-				if currentSuffix == c.maxHumanizedSuffix {
-					sb.WriteString(fmt.Sprintf("%s/%s%s",
-						currentHumanize, c.maxHumanized, c.maxHumanizedSuffix))
-				} else {
-					sb.WriteString(fmt.Sprintf("%s%s/%s%s",
-						currentHumanize, currentSuffix, c.maxHumanized, c.maxHumanizedSuffix))
-				}
-			} else {
-				sb.WriteString(fmt.Sprintf("%.0f/%d", s.currentBytes, c.max))
-			}
-		} else {
-			if c.showBytes {
-				currentHumanize, currentSuffix := humanizeBytes(s.currentBytes, c.useIECUnits)
-				sb.WriteString(fmt.Sprintf("%s%s", currentHumanize, currentSuffix))
-			} else {
-				sb.WriteString(fmt.Sprintf("%.0f/%s", s.currentBytes, "-"))
-			}
-		}
-	}
+	showIterationCount(c, sb, s)
 
 	// show rolling average rate
-	if c.showBytes && averageRate > 0 && !math.IsInf(averageRate, 1) {
-		if sb.Len() == 0 {
-			sb.WriteString("(")
-		} else {
-			sb.WriteString(", ")
-		}
-		currentHumanize, currentSuffix := humanizeBytes(averageRate, c.useIECUnits)
-		sb.WriteString(fmt.Sprintf("%s%s/s", currentHumanize, currentSuffix))
-	}
+	showRollingAvgRate(c, sb, averageRate)
 
 	// show iterations rate
-	if c.showIterationsPerSecond {
-		if sb.Len() == 0 {
-			sb.WriteString("(")
-		} else {
-			sb.WriteString(", ")
-		}
-		if averageRate > 1 {
-			sb.WriteString(fmt.Sprintf("%0.0f %s/s", averageRate, c.iterationString))
-		} else if averageRate*60 > 1 {
-			sb.WriteString(fmt.Sprintf("%0.0f %s/min", 60*averageRate, c.iterationString))
-		} else {
-			sb.WriteString(fmt.Sprintf("%0.0f %s/hr", 3600*averageRate, c.iterationString))
-		}
-	}
+	showIterationRate(c, sb, averageRate)
+
 	if sb.Len() > 0 {
 		sb.WriteString(")")
 	}
@@ -1014,6 +958,80 @@ func renderProgressBar(c config, s *state) (int, error) {
 	s.rendered = str
 
 	return getStringWidth(c, str, false), writeString(c, str)
+}
+
+func calculateAvgRate(s *state) float64 {
+	averageRate := average(s.counterLastTenRates)
+	if len(s.counterLastTenRates) == 0 || s.finished {
+		// if no average samples, or if finished,
+		// then average rate should be the total rate
+		if t := time.Since(s.startTime).Seconds(); t > 0 {
+			averageRate = s.currentBytes / t
+		} else {
+			averageRate = 0
+		}
+	}
+	return averageRate
+}
+
+func showRollingAvgRate(c config, sb strings.Builder, averageRate float64) {
+	if c.showBytes && averageRate > 0 && !math.IsInf(averageRate, 1) {
+		if sb.Len() == 0 {
+			sb.WriteString("(")
+		} else {
+			sb.WriteString(", ")
+		}
+		currentHumanize, currentSuffix := humanizeBytes(averageRate, c.useIECUnits)
+		sb.WriteString(fmt.Sprintf("%s%s/s", currentHumanize, currentSuffix))
+	}
+}
+
+func showIterationRate(c config, sb strings.Builder, averageRate float64) {
+	if c.showIterationsPerSecond {
+		if sb.Len() == 0 {
+			sb.WriteString("(")
+		} else {
+			sb.WriteString(", ")
+		}
+		if averageRate > 1 {
+			sb.WriteString(fmt.Sprintf("%0.0f %s/s", averageRate, c.iterationString))
+		} else if averageRate*60 > 1 {
+			sb.WriteString(fmt.Sprintf("%0.0f %s/min", 60*averageRate, c.iterationString))
+		} else {
+			sb.WriteString(fmt.Sprintf("%0.0f %s/hr", 3600*averageRate, c.iterationString))
+		}
+	}
+}
+
+func showIterationCount(c config, sb strings.Builder, s *state) {
+	if c.showIterationsCount {
+		if sb.Len() == 0 {
+			sb.WriteString("(")
+		} else {
+			sb.WriteString(", ")
+		}
+		if !c.ignoreLength {
+			if c.showBytes {
+				currentHumanize, currentSuffix := humanizeBytes(s.currentBytes, c.useIECUnits)
+				if currentSuffix == c.maxHumanizedSuffix {
+					sb.WriteString(fmt.Sprintf("%s/%s%s",
+						currentHumanize, c.maxHumanized, c.maxHumanizedSuffix))
+				} else {
+					sb.WriteString(fmt.Sprintf("%s%s/%s%s",
+						currentHumanize, currentSuffix, c.maxHumanized, c.maxHumanizedSuffix))
+				}
+			} else {
+				sb.WriteString(fmt.Sprintf("%.0f/%d", s.currentBytes, c.max))
+			}
+		} else {
+			if c.showBytes {
+				currentHumanize, currentSuffix := humanizeBytes(s.currentBytes, c.useIECUnits)
+				sb.WriteString(fmt.Sprintf("%s%s", currentHumanize, currentSuffix))
+			} else {
+				sb.WriteString(fmt.Sprintf("%.0f/%s", s.currentBytes, "-"))
+			}
+		}
+	}
 }
 
 func clearProgressBar(c config, s state) error {
